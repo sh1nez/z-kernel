@@ -1,4 +1,11 @@
-const builtin = @import("builtin");
+const std = @import("std");
+const builtin = std.builtin;
+
+const MultiBoot = extern struct {
+    magic: i32,
+    flags: i32,
+    checksum: i32,
+};
 
 const ALIGN = 1 << 0;
 const MEMINFO = 1 << 1;
@@ -23,52 +30,78 @@ const VGA_COLOR_LIGHT_MAGENTA = 13;
 const VGA_COLOR_LIGHT_BROWN = 14;
 const VGA_COLOR_WHITE = 15;
 
-const VGA_WIDTH = 80;
-const VGA_WEIGHT = 25;
-
-const MultiBoot = packed struct {
-    magic: i32,
-    flags: i32,
-    checksum: i32,
+export var multiboot align(4) linksection(".multiboot") = MultiBoot{
+    .magic = MAGIC,
+    .flags = FLAGS,
+    .checksum = -(MAGIC + FLAGS),
 };
 
-export var multiboot align(4) linksection(".multiboot") = MultiBoot{ .magic = MAGIC, .flags = FLAGS, .checksum = -(MAGIC + FLAGS) };
+export fn _start() noreturn {
+    @call(.auto, kmain, .{});
 
-export var stack_bytes: [16 * 1024]u8 align(16) linksection(".bss") = undefined;
-
-export fn _start() callconv(.Naked) noreturn {
-    @call(.{ .stack = stack_bytes[0..] }, kernel_main, .{});
-}
-
-fn kernel_main() void { // callconv(.Naked)
-    tty.write("Hello from kernel world!");
     while (true) {}
 }
 
-const tty = struct {
+pub fn panic(msg: []const u8, error_return_trace: ?*builtin.StackTrace, siz: ?usize) noreturn {
+    _ = error_return_trace; // keep zig compiler happy with unused parameter
+    _ = siz;
+    @setCold(true);
+    terminal.write("KERNEL PANIC: ");
+    terminal.write(msg);
+
+    while (true) {}
+}
+
+fn kmain() void {
+    terminal.initialize();
+    terminal.write("Hello, Kernel World from Zig 0.11.0!");
+}
+
+fn vga_entry_color(fg: VgaColor, bg: VgaColor) u8 {
+    return fg | (bg << 4);
+}
+fn vga_entry(uc: u8, color: u8) u16 {
+    return uc | (@as(u16, color) << 8);
+}
+const VGA_WIDTH = 80;
+const VGA_HEIGHT = 25;
+
+const terminal = struct {
     var row: usize = 0;
     var column: usize = 0;
-    var color: u8 = VGA_COLOR_DARK_GREY | u8(VGA_COLOR_BLACK << 4); // fg | bg
-    //
+
+    var color = vga_entry_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+
     const buffer: [*]volatile u16 = @ptrFromInt(0xB8000);
 
-    inline fn char_to_vga(uc: u8) u16 {
-        return uc | (u16(color) << 8);
+    fn initialize() void {
+        var y: usize = 0;
+        while (y < VGA_HEIGHT) : (y += 1) {
+            var x: usize = 0;
+            while (x < VGA_WIDTH) : (x += 1) {
+                putCharAt(' ', color, x, y);
+            }
+        }
     }
-
-    fn putch(char: u8) void {
-        buffer[VGA_WIDTH * row + column] = char_to_vga(char);
-
+    fn setColor(new_color: u8) void {
+        color = new_color;
+    }
+    fn putCharAt(c: u8, new_color: u8, x: usize, y: usize) void {
+        const index = y * VGA_WIDTH + x;
+        buffer[index] = vga_entry(c, new_color);
+    }
+    fn putChar(c: u8) void {
+        putCharAt(c, color, column, row);
         column += 1;
-        if (column == VGA_WEIGHT) {
+        if (column == VGA_WIDTH) {
             column = 0;
             row += 1;
+            if (row == VGA_HEIGHT)
+                row = 0;
         }
     }
-
-    fn write(date: []const u8) void {
-        for (&date) |*ch| {
-            putch(ch.*);
-        }
+    fn write(data: []const u8) void {
+        for (data) |c|
+            putChar(c);
     }
 };
