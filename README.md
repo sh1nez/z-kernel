@@ -1,4 +1,9 @@
 run:
 ```bash
-qemu-system-i386 -kernel zig-out/bin/kernel
+zig build run
+```
+
+Dependencies for qemu build for archlinux:
+```bash
+sudo pacman -S extra/qemu-ui-gtk extra/qemu-base extra/mtools extra/zig
 ```
