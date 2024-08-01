@@ -54,7 +54,7 @@ pub fn panic(msg: []const u8, error_return_trace: ?*builtin.StackTrace, siz: ?us
 
 fn kmain() void {
     terminal.initialize();
-    terminal.write("Hello, Kernel World from Zig 0.11.0!");
+    terminal.write("Hello, Kernel World from Zig 0.11.0!\n111111111122222222223333333333444444444455555555556666666666777777777788888888889999999999");
 }
 
 fn vga_entry_color(fg: VgaColor, bg: VgaColor) u8 {
